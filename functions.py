@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+from prophet import Prophet
 
 # Function to convert 'K' and 'M' to numeric values
 def convert_to_numeric(val):
@@ -63,8 +64,65 @@ def calculate_metrics(test_values, predicted_values):
         "R²": r2
     }
 
-# Example of how to use the function
-# metrics = calculate_metrics(test_fbp['y'], predictions_fbp['yhat'])
+def expanding_window_cv_prophet(df, regressors, initial_train_size = 0.5, test_size = 90):
+    """
+    Perform expanding window cross-validation on a Prophet model with specified regressors.
+
+    Parameters:
+    - df (DataFrame): The time series data with 'ds' as date, 'y' as target, and additional regressors.
+    - regressors (list): List of column names to be added as regressors.
+    - initial_train_size (int): Initial size of the training set.
+    - test_size (int): Number of observations in each test set.
+
+    Returns:
+    - avg_rmse (float): Average RMSE across all folds.
+    - avg_mae (float): Average MAE across all folds.
+    - rmse_scores (list): RMSE scores for each fold.
+    - mae_scores (list): MAE scores for each fold.
+    """
+    rmse_scores = []
+    mae_scores = []
+
+    # Expanding window cross-validation loop
+    for i in range(initial_train_size, len(df) - test_size, test_size):
+        # Define training and testing sets with expanding window
+        train_data = df.iloc[:i]
+        test_data = df.iloc[i:i + test_size]
+        
+        # Initialize and configure the Prophet model with regressors
+        model_fbp_lag_ma_cv = Prophet()
+        for reg in regressors:
+            model_fbp_lag_ma_cv.add_regressor(reg)
+        
+        # Fit the model on the expanding training set
+        model_fbp_lag_ma_cv.fit(train_data)
+        
+        # Prepare future dataframe for the test period with necessary regressors
+        future = test_data[['ds'] + regressors]
+        
+        # Predict on the test set
+        forecast = model_fbp_lag_ma_cv.predict(future)
+        predictions = forecast['yhat'].values
+        
+        # Compute the evaluation metrics (RMSE and MAE)
+        rmse = np.sqrt(mean_squared_error(test_data['y'], predictions))
+        mae = mean_absolute_error(test_data['y'], predictions)
+        
+        # Append the results for each fold
+        rmse_scores.append(rmse)
+        mae_scores.append(mae)
+        
+        print(f"Fold ending at {test_data['ds'].iloc[-1]}: RMSE = {rmse}, MAE = {mae}")
+
+    # Calculate average metrics across all folds
+    avg_rmse = np.mean(rmse_scores)
+    avg_mae = np.mean(mae_scores)
+    
+    print("\nAverage RMSE:", avg_rmse)
+    print("Average MAE:", avg_mae)
+    
+    return avg_rmse, avg_mae, rmse_scores, mae_scores
+
 
 def plot_actual_vs_predicted(df_actual, df_predicted, actual_col='y', predicted_col='yhat', date_col='ds'):
     """
@@ -92,5 +150,3 @@ def plot_actual_vs_predicted(df_actual, df_predicted, actual_col='y', predicted_
     # Show plot
     plt.show()
 
-# Example usage
-# plot_actual_vs_predicted(df_n, predictions_fbp_lag)
