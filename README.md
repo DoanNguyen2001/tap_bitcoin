@@ -1,9 +1,3 @@
-
-
-Here's a README file for your Bitcoin price prediction project: 
-
----
-
 # Bitcoin Price Prediction Project
 
 ## Overview
